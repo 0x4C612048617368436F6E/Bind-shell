@@ -14,3 +14,4 @@ typedef struct{
 void simpleClient();
 char* processInput(int*);
 void sendWrapper(int, void*, size_t);
+void recvWrapper(int, void*, size_t);

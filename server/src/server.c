@@ -114,10 +114,12 @@ void simpleServer(){
     size_t sizeToMakeActualMessageBe = 0;
     size_t lengthOfStdoutOutput = 0;
     int justStarted = 0;
+    size_t lengthOfUserInput = 0;
     while(1){
 
         //will read the startup first
         if(justStarted == 0){
+            int lengthOfStartUpScript = 0;
             lengthOfStdoutOutput = 1024;
             //shift file pointer indicator back
             //fseek(aslave,0,SEEK_SET);
@@ -132,7 +134,13 @@ void simpleServer(){
             readWrapper(amaster,(void*)buffer,lengthOfStdoutOutput);
             //printf("Finished amaster\n");
             *(buffer+strlen(buffer)) = '\0';
-            simpleLogger(buffer);
+            //simpleLogger(buffer);
+            lengthOfUserInput = strlen(buffer);
+            //network uses big endial
+            lengthOfStdoutOutput = lengthOfUserInput;
+            lengthOfUserInput = htons(lengthOfUserInput);
+            sendWrapper(client.clientFileDescriptor, (void*)&lengthOfUserInput, sizeof(int));
+            sendWrapper(client.clientFileDescriptor,(void*)buffer,lengthOfStdoutOutput);
             justStarted+=1;
             continue;
         }
@@ -140,14 +148,14 @@ void simpleServer(){
         //first recv from client - The size of the message first (will limit it to int which is 4 bytes)
         //realloc back
         lengthOfStdoutOutput = 0;
-        buffer = (char*)realloc(buffer,DEFAULT_BUFFER_SIZE);
+        buffer = (char*)realloc(buffer,sizeof(int));
         if(!buffer){
             perror("An error occused: ");
             close(serverSocket.socketFileDescriptor);
             free(buffer);
             exit(EXIT_FAILURE);
         }
-        memset(buffer,0,DEFAULT_BUFFER_SIZE);
+        memset(buffer,0,sizeof(int));
         //printf("Waiting\n");
         recvWrapper(client.clientFileDescriptor,(void*)buffer,sizeof(int));
         //printf("Wanting ti receive\n");
@@ -192,8 +200,18 @@ void simpleServer(){
         //printf("Reading from amster\n");
         readWrapper(amaster,(void*)buffer,lengthOfStdoutOutput);
         //printf("Finished amaster\n");
+        //send length of message
         *(buffer+strlen(buffer)) = '\0';
-        simpleLogger(buffer);
+        lengthOfUserInput = strlen(buffer);
+        //network uses big endial
+        lengthOfStdoutOutput = lengthOfUserInput;
+        lengthOfUserInput = htons(lengthOfUserInput);
+        sendWrapper(client.clientFileDescriptor, (void*)&lengthOfUserInput, sizeof(int));
+
+        //send actual message
+        sendWrapper(client.clientFileDescriptor,(void*)buffer,lengthOfStdoutOutput);
+            justStarted+=1;
+
 
     }
 }
@@ -211,8 +229,18 @@ void recvWrapper(int clientFileDescriptor, void* buffer, size_t size){
     }
 }
 
-void sendWrapper(){
-    printf("Hello");
+void sendWrapper(int clientFileDescriptor, void* buffer, size_t size){
+    //convert to char
+    char* pointerToBuffer = (char*)buffer;
+    int bytesSent = 0;
+    size_t remainingSizeToSend = size;
+    ssize_t pointerToBufferToKeepTrackOfBytesSent = 0;
+    while(remainingSizeToSend > 0){
+        bytesSent = send(clientFileDescriptor,pointerToBuffer+pointerToBufferToKeepTrackOfBytesSent,remainingSizeToSend,0);
+        pointerToBufferToKeepTrackOfBytesSent+=bytesSent;
+        remainingSizeToSend-=bytesSent;
+    }
+    //printf("Not greater than: \n");
 }
 
 void writeWrapper(int amasterFileDescriptor, void* buffer, size_t size){
@@ -241,7 +269,7 @@ void readWrapper(int amasterFileDescriptor, void* buffer, size_t size){
     //printf("Bytes recieved: %d\n",bytesReceived);
     //need the below just to test if new byteReeived is less than, so that we can just stop
     printf("MORE BYTES TO BE READ\n");
-    printf("Values of isThereMoreBytes: %d\n",isThereMoreBytes);
+    printf("Values of isThereMoreBytes Up: %d\n",isThereMoreBytes);
 
     while(isThereMoreBytes > 0){
         printf("Reading bytes\n");
@@ -256,6 +284,13 @@ void readWrapper(int amasterFileDescriptor, void* buffer, size_t size){
         if (ioctl(amasterFileDescriptor, FIONREAD, &isThereMoreBytes) == -1) {
             printf("NO MORE BYTES TO BE READ\n");
         }
+        printf("Bytes received: %d\n",bytesReceived);
+        printf("Values of isThereMoreBytes Down: %d\n",isThereMoreBytes);
+        //get the difference between bytes received and isThereMoreBytes and use that to get the remaining bytes
         
     }
+}
+
+size_t customMax(int a, int b){
+    return (a > b) ? (size_t)((size_t)a - (size_t)b) : (size_t)((size_t)b - (size_t)a);
 }

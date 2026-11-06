@@ -22,12 +22,55 @@ void simpleClient(){
     //recive
     simpleLogger("Enter input");
     char* buffer = NULL;
+    //char* recvBuffer = NULL;
     ssize_t bytes = 0;
     ssize_t test = 0;
     char res[1024];
     size_t lengthOfUserInput = 0;
     size_t tempLengthOfUserInput = 0;
+    int justStarted = 0;
+    size_t sizeToMakeActualMessageBe = 0;
     while(1){
+        if(justStarted == 0){
+            buffer = (char*)malloc(sizeof(char)*SIZE_OF_INPUT_BUFFER);
+            if(!buffer){
+                perror("An error occused Here: ");
+                close(clientSocket.socketFileDescriptor);
+                free(buffer);
+                exit(EXIT_FAILURE);
+            }
+            memset(buffer,0,SIZE_OF_INPUT_BUFFER);
+            //printf("Waiting\n");
+            
+            recvWrapper(clientSocket.socketFileDescriptor, (void*)buffer, sizeof(int));
+            printf("Right here\n");
+            char* pointerToSizeToMakeActualMessageBe = (char*)((void*)&sizeToMakeActualMessageBe);
+            for(int i = 0; i<sizeof(int); i++){
+                *(pointerToSizeToMakeActualMessageBe+i) = *(buffer+i);
+            }
+            //keep in mind network uses big endian
+            sizeToMakeActualMessageBe = ntohs(sizeToMakeActualMessageBe);
+            buffer = (char*)realloc(buffer,sizeToMakeActualMessageBe+1);
+            if(!buffer){
+                perror("An error occused: ");
+                close(clientSocket.socketFileDescriptor);
+                free(buffer);
+                exit(EXIT_FAILURE);
+            }
+            recvWrapper(clientSocket.socketFileDescriptor,(void*)buffer,sizeToMakeActualMessageBe);
+            *(buffer + sizeToMakeActualMessageBe) = '\0';
+            printf("%s\n",buffer);
+            justStarted+=1;
+            continue;
+        }
+        buffer = realloc(buffer,SIZE_OF_INPUT_BUFFER);
+        if(!buffer){
+            perror("An error occused: ");
+            close(clientSocket.socketFileDescriptor);
+            free(buffer);
+            exit(EXIT_FAILURE);
+        }
+        memset(buffer,0,SIZE_OF_INPUT_BUFFER);
         bytes = 0;
         test = 0;
         printf("> ");
@@ -40,17 +83,35 @@ void simpleClient(){
         sendWrapper(clientSocket.socketFileDescriptor,(void*)&lengthOfUserInput,sizeof(int));
         //send actual message
         sendWrapper(clientSocket.socketFileDescriptor,(void*)buffer,tempLengthOfUserInput);
-        //bytes = send(clientSocket.socketFileDescriptor,(void*)buffer,strlen(buffer)+1,0);
-        //printf("Bytes sent is: %d\n",bytes);
 
-        // test = recv(clientSocket.socketFileDescriptor,(void*)res,sizeof(res),0);
-        // printf("Ok");
-        // if(test == 0){
-        //     printf("Server shutdown\n");
-        // }else{
-        //     printf("Bytes received: %d\n",test);
-        //     printf("%s\n",res);
-        // }
+        //recv message
+        buffer = (char*)realloc(buffer,sizeof(int));
+        if(!buffer){
+            perror("An error occused: ");
+            close(clientSocket.socketFileDescriptor);
+            free(buffer);
+            exit(EXIT_FAILURE);
+        }
+        memset(buffer,0,sizeof(int));
+        //printf("Waiting\n");
+        recvWrapper(clientSocket.socketFileDescriptor,(void*)buffer,sizeof(int));
+
+        char* pointerToSizeToMakeActualMessageBe = (char*)((void*)&sizeToMakeActualMessageBe);
+        for(int i = 0; i<sizeof(int); i++){
+            *(pointerToSizeToMakeActualMessageBe+i) = *(buffer+i);
+        }
+        //keep in mind network uses big endian
+        sizeToMakeActualMessageBe = ntohs(sizeToMakeActualMessageBe);
+        buffer = (char*)realloc(buffer,sizeToMakeActualMessageBe+1);
+        if(!buffer){
+            perror("An error occused: ");
+            close(clientSocket.socketFileDescriptor);
+            free(buffer);
+            exit(EXIT_FAILURE);
+        }
+        recvWrapper(clientSocket.socketFileDescriptor,(void*)buffer,sizeToMakeActualMessageBe);
+        *(buffer + sizeToMakeActualMessageBe) = '\0';
+        printf("%s",buffer);
     }
 
 
@@ -105,5 +166,17 @@ void sendWrapper(int clientFileDescriptor, void* buffer, size_t size){
         pointerToBufferToKeepTrackOfBytesSent+=bytesSent;
         remainingSizeToSend-=bytesSent;
     }
-    printf("Not greater than: \n");
+}
+
+void recvWrapper(int clientFileDescriptor, void* buffer, size_t size){
+    //convert to char
+    char* pointerToBuffer = (char*)buffer;
+    int bytesReceived = 0;
+    ssize_t pointerToBufferToKeepTrackOfBytesReceived = 0;
+    size_t remainingSizeToReceive = size;
+    while(remainingSizeToReceive > 0){
+        bytesReceived = recv(clientFileDescriptor,pointerToBuffer+pointerToBufferToKeepTrackOfBytesReceived,remainingSizeToReceive,0);
+        pointerToBufferToKeepTrackOfBytesReceived+=bytesReceived;
+        remainingSizeToReceive-=bytesReceived;
+    }
 }

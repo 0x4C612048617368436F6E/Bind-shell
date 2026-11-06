@@ -16,6 +16,7 @@ typedef struct{
 }SERVER;
 void simpleServer();
 void recvWrapper(int, void*, size_t);
-void sendWrapper();
+void sendWrapper(int, void*, size_t);
 void writeWrapper(int, void*, size_t);
 void readWrapper(int, void*, size_t);
+size_t customMax(int, int);
